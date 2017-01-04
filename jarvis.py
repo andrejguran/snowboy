@@ -8,6 +8,8 @@ import copy
 import pyaudio
 import wave
 import time
+from wit import Wit
+import requests
 
 THRESHOLD = 500  # audio levels not normalised.
 CHUNK_SIZE = 1024
@@ -19,6 +21,7 @@ RATE = 44100
 CHANNELS = 1
 TRIM_APPEND = RATE / 4
 interrupted = False
+RECORD_SECONDS = 3
 
 detector = False
 
@@ -63,7 +66,7 @@ def record():
     audio_started = False
     data_all = array('h')
 
-    while True:
+    for i in range(0, RATE / CHUNK_SIZE * RECORD_SECONDS):
         # little endian, signed short
         data_chunk = array('h', stream.read(CHUNK_SIZE, False))
         if byteorder == 'big':
@@ -112,20 +115,53 @@ def interrupt_callback():
     global interrupted
     return interrupted
 
+def play_music():
+	print('PLaying music...')
+
+def send_action():
+    print('sending action')
+
+actions = {
+    'play_music': play_music,
+    'send': send_action
+}
+client = Wit(access_token='Z4EWWHOU5UHRAL22EZ4CFO3RYPV7RSYJ', actions=actions)
+
 
 def listener():
-	global detector
-	
-	detector.terminate()
-	#snowboydecoder.play_audio_file()
-	print('Started Recording')
-	snowboydecoder.play_audio_file()
-	record_to_file('jarvis_detect.wav')
-	snowboydecoder.play_audio_file()
-	snowboydecoder.play_audio_file('jarvis_detect.wav')
-	print('Detected!')
+    global detector
+    global client
 
-	decoder_loop()
+    detector.terminate()
+    #snowboydecoder.play_audio_file()
+    print('Started Recording')
+    snowboydecoder.play_audio_file()
+    record_to_file('jarvis_detect.wav')
+    snowboydecoder.play_audio_file()
+    snowboydecoder.play_audio_file('jarvis_detect.wav')
+    print('Detected! Sending...')
+    f = open('jarvis_detect.wav', 'r')
+    response = requests.post(url='https://api.wit.ai/speech?v=20160526', data=f, headers={'Authorization': 'Bearer Z4EWWHOU5UHRAL22EZ4CFO3RYPV7RSYJ', 'Content-Type': 'audio/wav'})
+    j = response.json()
+
+    print('Response: '+str(j))
+    
+    if ('intent' in j['entities'] and j['entities']['intent']):
+        intent = j['entities']['intent'][0]['value']
+        if (intent == 'play_music'):
+            print('playing music........')
+            response = requests.post(url='http://mopidy.musky.duckdns.org/mopidy/rpc', data='{"jsonrpc": "2.0", "id": 1, "method": "core.playback.play"}')
+            print('Respo:' + str(response))
+        elif (intent == 'pause_music'):
+            print('pausing music........')
+            response = requests.post(url='http://mopidy.musky.duckdns.org/mopidy/rpc', data='{"jsonrpc": "2.0", "id": 1, "method": "core.playback.pause"}')
+            print('Respo:' + str(response))
+        else:
+            snowboydecoder.play_audio_file("resources/dong.wav")
+    else:
+        snowboydecoder.play_audio_file("resources/dong.wav")
+
+    decoder_loop()
 
 def decoder_loop():
 	global detector
@@ -142,3 +178,12 @@ signal.signal(signal.SIGINT, signal_handler)
 
 # main loop
 decoder_loop()
+
+# f = open('jarvis_detect.wav', 'r')
+# response = requests.post(url='https://api.wit.ai/speech?v=20160526',
+#                     data=f,
+#                     headers={'Authorization': 'Bearer Z4EWWHOU5UHRAL22EZ4CFO3RYPV7RSYJ', 'Content-Type': 'audio/wav'})
+# j = response.json()
+# intent = 
+# print('Done: '+str(j['entities']['intent'][0]['value']))   
+
